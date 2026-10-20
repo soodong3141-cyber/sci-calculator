@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>*,*::before,*::after{box-sizing:border-box}:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font-size:14px}[hidden]{display:none!important}</style>
+<title>공학용 계산기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
+<style>
+/* Layout: one hardware-style calculator body, history tape beside it (stacks below on phones) */
+:root{
+  --bg:#e9ecf0; --case:#f7f8fa; --edge:#d3d8df;
+  --lcd:#dfe7dd; --lcd-ink:#1e2b22; --lcd-dim:#5d6e61;
+  --key:#ffffff; --key-ink:#1d232b;
+  --fn:#e3e8ef; --fn-ink:#2b3a4f;
+  --op:#2f4c7c; --op-ink:#ffffff;
+  --accent:#d9822b; --accent-ink:#ffffff;
+  --muted:#6b7480; --danger:#b3412f;
+  --shadow:0 1px 0 rgba(20,30,45,.12);
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --f-sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111418; --case:#1a1e24; --edge:#2a3039;
+  --lcd:#1b2620; --lcd-ink:#cfe6cc; --lcd-dim:#7f9a84;
+  --key:#262c34; --key-ink:#e8ecf1;
+  --fn:#1f252d; --fn-ink:#b9c7da;
+  --op:#3a5d96; --op-ink:#ffffff;
+  --accent:#e0913f; --accent-ink:#1a1206;
+  --muted:#8b95a2; --danger:#e07a68;
+  --shadow:0 1px 0 rgba(0,0,0,.4); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111418; --case:#1a1e24; --edge:#2a3039;
+  --lcd:#1b2620; --lcd-ink:#cfe6cc; --lcd-dim:#7f9a84;
+  --key:#262c34; --key-ink:#e8ecf1;
+  --fn:#1f252d; --fn-ink:#b9c7da;
+  --op:#3a5d96; --op-ink:#ffffff;
+  --accent:#e0913f; --accent-ink:#1a1206;
+  --muted:#8b95a2; --danger:#e07a68;
+  --shadow:0 1px 0 rgba(0,0,0,.4); color-scheme:dark}
+html,body{min-height:100%}
+body{background:var(--bg);color:var(--key-ink);font-family:var(--f-sans);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:24px}
+.wrap{display:flex;gap:20px;justify-content:center;align-items:flex-start;flex-wrap:wrap;max-width:880px;margin:0 auto}
+.calc{flex:1 1 380px;max-width:460px;min-width:0;background:var(--case);border:1px solid var(--edge);border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:14px}
+.top{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);letter-spacing:.06em}
+.top b{font-family:var(--f-mono);font-weight:600;color:var(--fn-ink);letter-spacing:.12em}
+.badges{display:flex;gap:6px}
+.badge{font-family:var(--f-mono);font-size:11px;padding:2px 7px;border-radius:4px;border:1px solid var(--edge);color:var(--muted)}
+.badge.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.lcd{background:var(--lcd);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;min-width:0;box-shadow:inset 0 2px 6px rgba(0,0,0,.12)}
+#expr{all:unset;display:block;width:100%;font-family:var(--f-mono);font-size:20px;color:var(--lcd-ink);caret-color:var(--accent);overflow-x:auto;white-space:nowrap}
+#expr::placeholder{color:var(--lcd-dim)}
+#out{font-family:var(--f-mono);font-size:34px;font-weight:500;text-align:right;color:var(--lcd-ink);min-height:44px;overflow-x:auto;white-space:nowrap;font-variant-numeric:tabular-nums}
+#out.preview{color:var(--lcd-dim);font-size:24px;min-height:44px;line-height:44px}
+#out.err{color:var(--danger);font-size:18px;line-height:44px}
+.keys{display:grid;grid-template-columns:repeat(6,1fr);gap:7px}
+.keys button{font:inherit;font-family:var(--f-mono);font-size:16px;min-height:48px;border-radius:9px;border:1px solid var(--edge);background:var(--key);color:var(--key-ink);cursor:pointer;box-shadow:var(--shadow);transition:transform .05s,filter .1s;padding:0 2px;touch-action:manipulation}
+.keys button:hover{filter:brightness(.96)}
+.keys button:active{transform:translateY(1px)}
+.keys button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.keys .fn{background:var(--fn);color:var(--fn-ink);font-size:14px}
+.keys .op{background:var(--op);color:var(--op-ink);border-color:transparent;font-size:19px}
+.keys .eq{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-size:20px;font-weight:600;grid-column:span 3}
+.keys .ac{color:var(--danger)}
+.keys .toggle.on{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.keys sup{font-size:.7em}
+.hint{font-size:12px;color:var(--muted);line-height:1.5}
+.hint kbd{font-family:var(--f-mono);font-size:11px;border:1px solid var(--edge);border-radius:4px;padding:0 4px}
+.tape{flex:1 1 260px;max-width:460px;min-width:0;background:var(--case);border:1px solid var(--edge);border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.tape h2{font-size:14px;font-weight:600;margin:0;display:flex;justify-content:space-between;align-items:center}
+.tape h2 button{font:inherit;font-size:12px;font-weight:400;color:var(--muted);background:none;border:none;cursor:pointer;padding:4px}
+.tape h2 button:hover{color:var(--danger)}
+#hist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;max-height:470px;overflow-y:auto}
+#hist li{border-top:1px dashed var(--edge);padding:8px 2px;display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+#hist button{all:unset;cursor:pointer;font-family:var(--f-mono);max-width:100%;overflow-wrap:anywhere;text-align:right}
+#hist .he{font-size:13px;color:var(--muted)}
+#hist .hr{font-size:17px;color:var(--key-ink);font-variant-numeric:tabular-nums}
+#hist button:hover{color:var(--accent)}
+#hist button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.empty{font-size:13px;color:var(--muted);padding:8px 0}
+@media (max-width:400px){.keys{gap:5px}.keys button{min-height:44px;font-size:14px}.keys .fn{font-size:12px}#out{font-size:28px}}
+@media (prefers-reduced-motion:reduce){.keys button{transition:none}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <section class="calc" aria-label="계산기">
+    <div class="top"><b>SCI-12</b><div class="badges"><span class="badge" id="b2nd">2nd</span><span class="badge on" id="bmode">DEG</span></div></div>
+    <div class="lcd">
+      <input id="expr" type="text" inputmode="none" autocomplete="off" spellcheck="false" placeholder="0" aria-label="수식">
+      <div id="out" aria-live="polite"></div>
+    </div>
+    <div class="keys" id="keys">
+      <button class="fn toggle" id="k2nd" data-act="2nd">2nd</button>
+      <button class="fn" id="kmode" data-act="mode">DEG</button>
+      <button class="fn" id="klp" data-ins="(">(</button>
+      <button class="fn" id="krp" data-ins=")">)</button>
+      <button class="fn" id="kpct" data-ins="%">%</button>
+      <button class="fn ac" id="kac" data-act="ac">AC</button>
+
+      <button class="fn" id="ksin" data-ins="sin(" data-ins2="asin(" data-l="sin" data-l2="sin⁻¹">sin</button>
+      <button class="fn" id="kcos" data-ins="cos(" data-ins2="acos(" data-l="cos" data-l2="cos⁻¹">cos</button>
+      <button class="fn" id="ktan" data-ins="tan(" data-ins2="atan(" data-l="tan" data-l2="tan⁻¹">tan</button>
+      <button class="fn" id="kpi" data-ins="π">π</button>
+      <button class="fn" id="ke" data-ins="e">e</button>
+      <button class="fn" id="kdel" data-act="del" aria-label="지우기">⌫</button>
+
+      <button class="fn" id="ksq" data-ins="²" data-ins2="³" data-l="x²" data-l2="x³">x²</button>
+      <button class="fn" id="kpow" data-ins="^" data-ins2="^(1÷" data-l="xʸ" data-l2="ʸ√x">xʸ</button>
+      <button id="k7" data-ins="7">7</button><button id="k8" data-ins="8">8</button><button id="k9" data-ins="9">9</button>
+      <button class="op" id="kdiv" data-ins="÷">÷</button>
+
+      <button class="fn" id="ksqrt" data-ins="√(" data-ins2="∛(" data-l="√" data-l2="∛">√</button>
+      <button class="fn" id="kinv" data-ins="⁻¹" data-l="x⁻¹">x⁻¹</button>
+      <button id="k4" data-ins="4">4</button><button id="k5" data-ins="5">5</button><button id="k6" data-ins="6">6</button>
+      <button class="op" id="kmul" data-ins="×">×</button>
+
+      <button class="fn" id="kln" data-ins="ln(" data-ins2="e^(" data-l="ln" data-l2="eˣ">ln</button>
+      <button class="fn" id="klog" data-ins="log(" data-ins2="10^(" data-l="log" data-l2="10ˣ">log</button>
+      <button id="k1" data-ins="1">1</button><button id="k2" data-ins="2">2</button><button id="k3" data-ins="3">3</button>
+      <button class="op" id="ksub" data-ins="−">−</button>
+
+      <button class="fn" id="kfact" data-ins="!">x!</button>
+      <button class="fn" id="kabs" data-ins="abs(" data-l="|x|">|x|</button>
+      <button id="k0" data-ins="0">0</button><button id="kdot" data-ins=".">.</button>
+      <button class="fn" id="kexp" data-ins="E" title="×10의 거듭제곱">EXP</button>
+      <button class="op" id="kadd" data-ins="+">+</button>
+
+      <button class="fn" id="kncr" data-ins="C" title="조합 nCr">nCr</button>
+      <button class="fn" id="knpr" data-ins="P" title="순열 nPr">nPr</button>
+      <button class="fn" id="kans" data-ins="Ans">Ans</button>
+      <button class="eq" id="keq" data-act="eq">=</button>
+    </div>
+    <div class="hint">키보드 입력 가능 · <kbd>Enter</kbd> 계산 · <kbd>Esc</kbd> 초기화 · <kbd>^</kbd> 거듭제곱 · <kbd>sqrt</kbd> <kbd>sinh</kbd> 등 함수명 직접 입력 가능</div>
+  </section>
+
+  <aside class="tape" aria-label="계산 기록">
+    <h2>계산 기록 <button id="clearHist" type="button">기록 지우기</button></h2>
+    <ul id="hist"></ul>
+  </aside>
+</div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const exprEl = $('expr'), outEl = $('out');
+  const store = {
+    get(k,d){ try{ const v = localStorage.getItem(k); return v==null?d:JSON.parse(v);}catch(e){return d;} },
+    set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  };
+  let deg = store.get('sci.deg', true);
+  let second = false;
+  let ans = store.get('sci.ans', 0);
+  let hist = store.get('sci.hist', []);
+  let justEval = false;
+
+  /* ---------- math ---------- */
+  function gamma(z){
+    if (z < 0.5) return Math.PI / (Math.sin(Math.PI*z) * gamma(1-z));
+    const g = 7, c = [0.99999999999980993,676.5203681218851,-1259.1392167224028,771.32342877765313,-176.61503916999185,12.507343278686905,-0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+    z -= 1; let x = c[0];
+    for (let i=1;i<g+2;i++) x += c[i]/(z+i);
+    const t = z + g + 0.5;
+    return Math.sqrt(2*Math.PI) * Math.pow(t, z+0.5) * Math.exp(-t) * x;
+  }
+  function fact(n){
+    if (Number.isInteger(n)){
+      if (n < 0) throw Error('음의 정수의 팩토리얼은 정의되지 않음');
+      if (n > 170) return Infinity;
+      let r = 1; for (let i=2;i<=n;i++) r*=i; return r;
+    }
+    return gamma(n+1);
+  }
+  function needInt(n){ if(!Number.isInteger(n)||n<0) throw Error('nCr·nPr은 0 이상의 정수만 가능'); }
+  function nPr(n,r){ needInt(n);needInt(r); if(r>n) return 0; let x=1; for(let i=0;i<r;i++) x*=(n-i); return x; }
+  function nCr(n,r){ needInt(n);needInt(r); if(r>n) return 0; r=Math.min(r,n-r); let x=1; for(let i=1;i<=r;i++) x=x*(n-r+i)/i; return Math.round(x); }
+
+  const snap = v => Math.abs(v) < 1e-14 ? 0 : v;
+  const toRad = x => deg ? x*Math.PI/180 : x;
+  const fromRad = x => deg ? x*180/Math.PI : x;
+  function trig(name, x){
+    if (deg){
+      const a = ((x % 360) + 360) % 360;
+      if (name==='sin' && (a===0||a===180)) return 0;
+      if (name==='cos' && (a===90||a===270)) return 0;
+      if (name==='tan'){ if (a===0||a===180) return 0; if (a===90||a===270) throw Error('tan 90°는 정의되지 않음'); }
+      if (name==='sin' && a===30) return 0.5;
+      if (name==='cos' && a===60) return 0.5;
+      if (name==='tan' && a===45) return 1;
+    }
+    return snap(Math[name](toRad(x)));
+  }
+  const FN = {
+    sin:x=>trig('sin',x), cos:x=>trig('cos',x), tan:x=>trig('tan',x),
+    asin:x=>{ if(x<-1||x>1) throw Error('sin⁻¹ 입력은 -1~1'); return fromRad(Math.asin(x)); },
+    acos:x=>{ if(x<-1||x>1) throw Error('cos⁻¹ 입력은 -1~1'); return fromRad(Math.acos(x)); },
+    atan:x=>fromRad(Math.atan(x)),
+    sinh:Math.sinh, cosh:Math.cosh, tanh:Math.tanh, asinh:Math.asinh, acosh:Math.acosh, atanh:Math.atanh,
+    ln:x=>{ if(x<=0) throw Error('ln은 양수만 가능'); return Math.log(x); },
+    log:x=>{ if(x<=0) throw Error('log는 양수만 가능'); return Math.log10(x); },
+    log2:x=>{ if(x<=0) throw Error('log2는 양수만 가능'); return Math.log2(x); },
+    sqrt:x=>{ if(x<0) throw Error('음수의 제곱근은 실수가 아님'); return Math.sqrt(x); },
+    cbrt:Math.cbrt, abs:Math.abs, exp:Math.exp
+  };
+  const CONST = { pi:Math.PI, e:Math.E };
+
+  /* ---------- tokenizer ---------- */
+  function tokenize(src){
+    const s = src.replace(/×|·/g,'*').replace(/÷/g,'/').replace(/[−–]/g,'-')
+                 .replace(/π/g,'pi').replace(/√/g,'sqrt').replace(/∛/g,'cbrt').replace(/\s+/g,'');
+    const out = []; let i = 0;
+    while (i < s.length){
+      const rest = s.slice(i), ch = s[i];
+      let m;
+      if ((m = rest.match(/^(\d+\.?\d*|\.\d+)(E[+\-]?\d+)?/))){ out.push({t:'num',v:parseFloat(m[0])}); i+=m[0].length; continue; }
+      if (rest.startsWith('Ans')){ out.push({t:'num',v:ans}); i+=3; continue; }
+      if (rest.startsWith('⁻¹')){ out.push({t:'post',v:'inv'}); i+=2; continue; }
+      if ('+-*/^CP'.includes(ch)){ out.push({t:'op',v:ch}); i++; continue; }
+      if ('!%²³'.includes(ch)){ out.push({t:'post',v:ch}); i++; continue; }
+      if (ch==='('||ch===')'){ out.push({t:ch}); i++; continue; }
+      if ((m = rest.match(/^[a-z]+\d?/))){
+        let w = m[0], found = null;
+        // longest known name at this position
+        for (let L=w.length; L>0; L--){
+          const sub = w.slice(0,L);
+          if (FN[sub]){ found={t:'fn',v:sub,len:L}; break; }
+          if (CONST[sub]!==undefined){ found={t:'num',v:CONST[sub],len:L}; break; }
+        }
+        if (!found) throw Error('알 수 없는 기호: ' + w);
+        out.push(found); i+=found.len; continue;
+      }
+      if (ch==='E') throw Error('EXP 앞에 숫자가 필요함');
+      throw Error('알 수 없는 기호: ' + ch);
+    }
+    return out;
+  }
+
+  /* ---------- parser (recursive descent) ---------- */
+  function evaluate(src){
+    const tk = tokenize(src); let p = 0;
+    if (!tk.length) throw Error('수식을 입력하세요');
+    const peek = () => tk[p], next = () => tk[p++];
+    const startsOperand = t => t && (t.t==='num'||t.t==='fn'||t.t==='(');
+    function expr(){
+      let v = term();
+      while (peek() && peek().t==='op' && (peek().v==='+'||peek().v==='-')){
+        const o = next().v, r = term(); v = o==='+' ? v+r : v-r;
+      }
+      return v;
+    }
+    function term(){
+      let v = unary();
+      for(;;){
+        const t = peek();
+        if (t && t.t==='op' && '*/CP'.includes(t.v)){
+          next(); const r = unary();
+          if (t.v==='*') v*=r;
+          else if (t.v==='/'){ if (r===0) throw Error('0으로 나눌 수 없음'); v/=r; }
+          else if (t.v==='C') v = nCr(v,r);
+          else v = nPr(v,r);
+        } else if (startsOperand(t)){ v *= power(); }   // implicit multiplication: 2π, 3(4), 2sin(30)
+        else break;
+      }
+      return v;
+    }
+    function unary(){
+      const t = peek();
+      if (t && t.t==='op' && (t.v==='-'||t.v==='+')){ next(); const v = unary(); return t.v==='-' ? -v : v; }
+      return power();
+    }
+    function power(){
+      const b = postfix();
+      if (peek() && peek().t==='op' && peek().v==='^'){
+        next(); const e = unary(); const r = Math.pow(b,e);
+        if (Number.isNaN(r)) throw Error('음수의 비정수 거듭제곱은 실수가 아님');
+        return r;
+      }
+      return b;
+    }
+    function postfix(){
+      let v = primary();
+      while (peek() && peek().t==='post'){
+        const o = next().v;
+        if (o==='!') v = fact(v);
+        else if (o==='%') v = v/100;
+        else if (o==='²') v = v*v;
+        else if (o==='³') v = v*v*v;
+        else if (o==='inv'){ if (v===0) throw Error('0의 역수는 정의되지 않음'); v = 1/v; }
+      }
+      return v;
+    }
+    function group(){
+      const v = expr();
+      if (peek() && peek().t===')') next();
+      else if (p < tk.length) throw Error('괄호가 맞지 않음');
+      return v;  // a missing ')' at the very end is closed automatically
+    }
+    function primary(){
+      const t = next();
+      if (!t) throw Error('수식이 덜 끝남');
+      if (t.t==='num') return t.v;
+      if (t.t==='('){ return group(); }
+      if (t.t==='fn'){
+        if (peek() && peek().t==='('){ next(); return FN[t.v](group()); }
+        return FN[t.v](power());
+      }
+      if (t.t===')') throw Error('괄호가 맞지 않음');
+      throw Error('연산자 위치가 잘못됨');
+    }
+    const v = expr();
+    if (p < tk.length) throw Error(tk[p].t===')' ? '괄호가 맞지 않음' : '수식 형식이 잘못됨');
+    if (Number.isNaN(v)) throw Error('정의되지 않은 값');
+    if (!Number.isFinite(v)) throw Error('계산 범위 초과');
+    return v;
+  }
+
+  /* ---------- formatting ---------- */
+  function fmt(v){
+    if (v === 0) return '0';
+    const a = Math.abs(v);
+    if (a >= 1e12 || a < 1e-9){
+      const [m,e] = v.toExponential(9).split('e');
+      return m.replace(/\.?0+$/,'') + 'E' + (e.startsWith('+') ? e.slice(1) : e);
+    }
+    return String(parseFloat(v.toPrecision(12)));
+  }
+  function pretty(s){
+    if (s.includes('E')) return s;
+    const [i,d] = s.split('.');
+    const g = i.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return d ? g + '.' + d : g;
+  }
+
+  /* ---------- UI ---------- */
+  function showPreview(){
+    const s = exprEl.value.trim();
+    outEl.className = 'preview';
+    if (!s){ outEl.textContent = ''; return; }
+    try { outEl.textContent = '= ' + pretty(fmt(evaluate(s))); }
+    catch(e){ outEl.textContent = ''; }
+  }
+  function doEval(){
+    const s = exprEl.value.trim();
+    if (!s) return;
+    try {
+      const v = evaluate(s), f = fmt(v);
+      outEl.className = ''; outEl.textContent = pretty(f);
+      ans = v; store.set('sci.ans', ans);
+      hist.unshift({e:s, r:f}); hist = hist.slice(0,50); store.set('sci.hist', hist);
+      renderHist(); justEval = true;
+    } catch(e){
+      outEl.className = 'err'; outEl.textContent = e.message;
+    }
+  }
+  function insert(txt){
+    if (justEval){
+      // after "=", an operator continues from Ans; anything else starts fresh
+      exprEl.value = /^[+\-−×÷^%!²³CP]|^⁻¹/.test(txt) ? 'Ans' : '';
+      exprEl.setSelectionRange(exprEl.value.length, exprEl.value.length);
+      justEval = false;
+    }
+    const a = exprEl.selectionStart ?? exprEl.value.length, b = exprEl.selectionEnd ?? a;
+    exprEl.value = exprEl.value.slice(0,a) + txt + exprEl.value.slice(b);
+    const c = a + txt.length;
+    exprEl.setSelectionRange(c,c);
+    showPreview(); keepCursorVisible();
+  }
+  function backspace(){
+    justEval = false;
+    const v = exprEl.value;
+    let a = exprEl.selectionStart ?? v.length, b = exprEl.selectionEnd ?? a;
+    if (a !== b){ exprEl.value = v.slice(0,a)+v.slice(b); exprEl.setSelectionRange(a,a); showPreview(); return; }
+    if (a === 0) return;
+    const before = v.slice(0,a);
+    const m = before.match(/(asin\(|acos\(|atan\(|sinh\(|cosh\(|tanh\(|sin\(|cos\(|tan\(|log\(|abs\(|ln\(|√\(|∛\(|e\^\(|10\^\(|\^\(1÷|Ans|⁻¹)$/);
+    const n = m ? m[0].length : 1;
+    exprEl.value = v.slice(0,a-n) + v.slice(a);
+    exprEl.setSelectionRange(a-n,a-n);
+    showPreview();
+  }
+  function clearAll(){ exprEl.value=''; outEl.textContent=''; outEl.className=''; justEval=false; }
+  function keepCursorVisible(){ exprEl.scrollLeft = exprEl.scrollWidth; }
+
+  function setSecond(on){
+    second = on;
+    $('k2nd').classList.toggle('on', on); $('b2nd').classList.toggle('on', on);
+    document.querySelectorAll('#keys [data-l2]').forEach(b=>{
+      b.innerHTML = (on ? b.dataset.l2 : b.dataset.l).replace(/ʸ/,'<sup>y</sup>');
+    });
+  }
+  function setMode(d){
+    deg = d; store.set('sci.deg', deg);
+    $('kmode').textContent = deg ? 'DEG' : 'RAD';
+    $('bmode').textContent = deg ? 'DEG' : 'RAD';
+    showPreview();
+  }
+
+  $('keys').addEventListener('click', e=>{
+    const b = e.target.closest('button'); if (!b) return;
+    const act = b.dataset.act;
+    if (act==='2nd') return setSecond(!second);
+    if (act==='mode') return setMode(!deg);
+    if (act==='ac') return clearAll();
+    if (act==='del') return backspace();
+    if (act==='eq') return doEval();
+    const txt = (second && b.dataset.ins2) ? b.dataset.ins2 : b.dataset.ins;
+    if (txt){ insert(txt); if (second) setSecond(false); }
+  });
+
+  exprEl.addEventListener('input', ()=>{ justEval=false; showPreview(); });
+  exprEl.addEventListener('keydown', e=>{
+    if (e.key==='Enter'||e.key==='='){ e.preventDefault(); doEval(); }
+    else if (e.key==='Escape'){ e.preventDefault(); clearAll(); }
+    else if (justEval && e.key.length===1 && !e.ctrlKey && !e.metaKey){
+      e.preventDefault(); insert(e.key==='*'?'×':e.key==='/'?'÷':e.key);
+    }
+  });
+  document.addEventListener('keydown', e=>{
+    if (document.activeElement===exprEl || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.target.closest && e.target.closest('button') && (e.key==='Enter'||e.key===' ')) return;
+    if (e.key.length===1 || e.key==='Enter' || e.key==='Escape' || e.key==='Backspace'){
+      exprEl.focus();
+      exprEl.setSelectionRange(exprEl.value.length, exprEl.value.length);
+      if (e.key==='Backspace'){ e.preventDefault(); backspace(); }
+      else if (e.key==='Enter'){ e.preventDefault(); doEval(); }
+      else if (e.key==='Escape'){ e.preventDefault(); clearAll(); }
+      else { e.preventDefault(); insert(e.key==='*'?'×':e.key==='/'?'÷':e.key); }
+    }
+  });
+
+  function renderHist(){
+    const ul = $('hist'); ul.innerHTML = '';
+    if (!hist.length){
+      const li = document.createElement('li'); li.className='empty'; li.style.alignItems='flex-start';
+      li.textContent = '= 을 누르면 여기에 기록됩니다. 수식을 누르면 다시 불러오고, 결과를 누르면 현재 수식에 넣습니다.';
+      ul.appendChild(li); return;
+    }
+    hist.forEach(h=>{
+      const li = document.createElement('li');
+      const be = document.createElement('button'); be.className='he'; be.textContent = h.e;
+      be.addEventListener('click', ()=>{ exprEl.value = h.e; justEval=false; exprEl.focus(); exprEl.setSelectionRange(h.e.length,h.e.length); showPreview(); });
+      const br = document.createElement('button'); br.className='hr'; br.textContent = '= ' + pretty(h.r);
+      br.addEventListener('click', ()=>{ justEval=false; insert(h.r); });
+      li.append(be, br); ul.appendChild(li);
+    });
+  }
+  $('clearHist').addEventListener('click', ()=>{ hist=[]; store.set('sci.hist', hist); renderHist(); });
+
+  setMode(deg); setSecond(false); renderHist();
+  exprEl.value = 'sin(30)+√(2)×π';   // example to show the live preview
+  showPreview();
+})();
+</script>
+
+</body>
+</html>
